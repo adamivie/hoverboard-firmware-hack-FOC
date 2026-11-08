@@ -27,3 +27,9 @@ Flash: openocd ... -c "program <bin> 0x08000000 verify reset exit" (no unlock ne
   Adds `volatile uint8_t hallPermL` (0..5, default 0 = stock order) at 0x2000091A. Write it over SWD
   (only while torque is 0) to try each hall order; equivalent to re-ordering the phase wires.
   Bake the winning value in with -DHALL_PERM_L_DEFAULT=n. Full diff vs bench source: hover-eferu-usart2-trq-bench-left-only-hallperm.diff
+
+## CURRENT: USART2 left-only, hall order 3 baked in (2026-11-08)
+- hover-eferu-usart2-trq-bench-left-only-hall3.bin  sha256 abd5e766d6c2259671fb9b9ab89e4b00bb9dd4248e49da5170371fa536fcebe7
+  Bench sweep: hallPermL=3 runs smoothly +309/-310 rpm at torque 100; 0..2 barely move. Built with
+  `#define HALL_PERM_L_DEFAULT 3` in config.h (see .config-vs-bench.diff). hallPermL now at 0x200000BE (.data), still writable over SWD.
+  Open issue: one MCU reset seen at torque 200 / 367 rpm free-spinning (cause unknown).
