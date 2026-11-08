@@ -21,3 +21,9 @@ Flash: openocd ... -c "program <bin> 0x08000000 verify reset exit" (no unlock ne
 - hover-eferu-usart2-trq-bench-left-only.bin  sha256 1240818b419db90199ea44b3a7899ab6e1b7cb5a250ac0511436221254f8594c
   Same as the left-only bench build, but control + feedback on USART2 (PA2 TX / PA3 RX, long/left sensor cable, NOT 5 V tolerant) instead of USART3. Config delta vs the committed bench config.h: hover-eferu-usart2-trq-bench-left-only.config-vs-bench.diff
   Note: the SWD torque test script's addresses are only valid for the USART3 left-only build.
+
+## USART2 left-only with live hall-order remap (2026-11-08)
+- hover-eferu-usart2-trq-bench-left-only-hallperm.bin  sha256 7eb6968cbcc0c5bb30efd1d76fa9989315d9afdb8e086fba98e0360d9038d087
+  Adds `volatile uint8_t hallPermL` (0..5, default 0 = stock order) at 0x2000091A. Write it over SWD
+  (only while torque is 0) to try each hall order; equivalent to re-ordering the phase wires.
+  Bake the winning value in with -DHALL_PERM_L_DEFAULT=n. Full diff vs bench source: hover-eferu-usart2-trq-bench-left-only-hallperm.diff

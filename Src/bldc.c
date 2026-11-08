@@ -33,6 +33,11 @@
 #include "BLDC_controller.h"           /* Model's header file */
 #include "rtwtypes.h"
 
+#ifndef HALL_PERM_L_DEFAULT
+  #define HALL_PERM_L_DEFAULT 0
+#endif
+volatile uint8_t hallPermL = HALL_PERM_L_DEFAULT;  // left motor hall order 0..5, changeable live over SWD
+
 extern RT_MODEL *const rtM_Left;
 extern RT_MODEL *const rtM_Right;
 
@@ -181,9 +186,16 @@ void DMA1_Channel1_IRQHandler(void) {
     rtU_Left.b_motEna     = enableFin;
     rtU_Left.z_ctrlModReq = ctrlModReq;  
     rtU_Left.r_inpTgt     = pwml;
-    rtU_Left.b_hallA      = hall_ul;
-    rtU_Left.b_hallB      = hall_vl;
-    rtU_Left.b_hallC      = hall_wl;
+    {
+      // Hall order remap (bench): hallPermL 0..5 selects one of the 6 hall orders.
+      // Equivalent to physically re-ordering the motor phase wires; current sensing is unaffected.
+      static const uint8_t hallPermTab[6][3] = {{0,1,2},{1,2,0},{2,0,1},{0,2,1},{2,1,0},{1,0,2}};
+      const uint8_t hl[3] = {hall_ul, hall_vl, hall_wl};
+      const uint8_t *hp = hallPermTab[(hallPermL < 6) ? hallPermL : 0];
+      rtU_Left.b_hallA    = hl[hp[0]];
+      rtU_Left.b_hallB    = hl[hp[1]];
+      rtU_Left.b_hallC    = hl[hp[2]];
+    }
     rtU_Left.i_phaAB      = curL_phaA;
     rtU_Left.i_phaBC      = curL_phaB;
     rtU_Left.i_DCLink     = curL_DC;
