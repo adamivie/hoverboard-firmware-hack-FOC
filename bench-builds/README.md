@@ -16,3 +16,8 @@ Same as the bench build, but only one motor channel enabled, so an empty channel
 - hover-eferu-usart3-trq-bench-left-only.bin  sha256 7c210c5eea23a15a817080372cf5e4229cfaed2caa3ac366542e1aab4e896400 (MOTOR_RIGHT_ENA commented out)
 - hover-eferu-usart3-trq-bench-right-only.bin sha256 9456ce694a8167943bf548870f7ff0295420ec4656e1d29522131735457fdaee (MOTOR_LEFT_ENA commented out)
 Flash: openocd ... -c "program <bin> 0x08000000 verify reset exit" (no unlock needed, J1 bridged).
+
+## USART2 (long/left sensor cable) left-only variant (2026-11-08)
+- hover-eferu-usart2-trq-bench-left-only.bin  sha256 1240818b419db90199ea44b3a7899ab6e1b7cb5a250ac0511436221254f8594c
+  Same as the left-only bench build, but control + feedback on USART2 (PA2 TX / PA3 RX, long/left sensor cable, NOT 5 V tolerant) instead of USART3. Config delta vs the committed bench config.h: hover-eferu-usart2-trq-bench-left-only.config-vs-bench.diff
+  Note: the SWD torque test script's addresses are only valid for the USART3 left-only build.
