@@ -1,4 +1,8 @@
-# hover-eferu-usart3-trq-bench.bin
+# Bench builds (JKL-PHC02-A-V02, EFeru FOC)
+
+CURRENT build: hover-eferu-usart2-trq-bench-left-only-hall3.bin (see the last section).
+
+## hover-eferu-usart3-trq-bench.bin
 
 First bench firmware for the JKL-PHC02-A-V02 mainboard (STM32F103RCT6 / GD32F103RCT6).
 
@@ -32,4 +36,9 @@ Flash: openocd ... -c "program <bin> 0x08000000 verify reset exit" (no unlock ne
 - hover-eferu-usart2-trq-bench-left-only-hall3.bin  sha256 abd5e766d6c2259671fb9b9ab89e4b00bb9dd4248e49da5170371fa536fcebe7
   Bench sweep: hallPermL=3 runs smoothly +309/-310 rpm at torque 100; 0..2 barely move. Built with
   `#define HALL_PERM_L_DEFAULT 3` in config.h (see .config-vs-bench.diff). hallPermL now at 0x200000BE (.data), still writable over SWD.
-  Open issue: one MCU reset seen at torque 200 / 367 rpm free-spinning (cause unknown).
+  Flashed and verified 2026-11-08; survives power cycles, spins +-200 rpm at torque 100.
+  The MCU reset seen at torque 200 / 367 rpm was a power-on/pin reset (RCC CSR 0x0C000000): the bench supply is the
+  original hoverboard charger (42 V, ~2 A), which collapses under load. Keep torque <= ~200-300 on the charger.
+
+## Where the rest lives
+The wheel project (FFB controller, PC tools, docs) is in adamivie/hoverboard-ffb-wheel. This branch holds only motor-board firmware builds.
