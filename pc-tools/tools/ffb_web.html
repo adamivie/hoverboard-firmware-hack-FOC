@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hoverwheel FFB</title>
+<style>
+  :root {
+    --bg: #0f1216; --panel: #181d23; --line: #2a313a; --text: #e6e9ee; --muted: #8b95a3;
+    --accent: #ff7a1a; --ok: #3ccf7a; --bad: #ff4d4d; --blue: #4aa3ff;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; align-items: center; gap: 12px; padding: 14px 20px;
+           border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  header h1 { font-size: 18px; margin: 0; font-weight: 650; letter-spacing: .2px; }
+  .pill { padding: 3px 10px; border-radius: 999px; font-size: 13px; background: var(--panel);
+          border: 1px solid var(--line); color: var(--muted); }
+  .pill.ok { color: var(--ok); border-color: #2b5a40; }
+  .pill.bad { color: var(--bad); border-color: #5a2b2b; }
+  .spacer { flex: 1; }
+  button { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line);
+           border-radius: 10px; padding: 10px 14px; cursor: pointer; }
+  button:hover { border-color: #3a4450; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #111; font-weight: 600; }
+  button.stop { background: var(--bad); border-color: var(--bad); color: #fff; font-weight: 700;
+                font-size: 17px; padding: 14px 22px; }
+  main { display: grid; grid-template-columns: minmax(280px, 380px) 1fr; gap: 18px; padding: 18px 20px;
+         max-width: 1100px; margin: 0 auto; }
+  @media (max-width: 760px) { main { grid-template-columns: 1fr; padding: 16px; } }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted);
+             margin: 0 0 12px; font-weight: 600; }
+  .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .modes button { text-align: left; padding: 12px; }
+  .modes button small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .modes button.active { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .modes kbd { float: right; color: var(--muted); font: 12px ui-monospace, monospace; }
+  label { display: block; color: var(--muted); font-size: 13px; margin: 14px 0 6px; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  .row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+  .stat { background: #12161b; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  .stat b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; font-weight: 650; }
+  .stat span { color: var(--muted); font-size: 12px; }
+  canvas { width: 100%; max-width: 360px; aspect-ratio: 1; display: block; margin: 6px auto 0; }
+  .bar { height: 12px; background: #12161b; border: 1px solid var(--line); border-radius: 6px;
+         position: relative; overflow: hidden; margin-top: 8px; }
+  .bar i { position: absolute; top: 0; bottom: 0; background: var(--accent); }
+  .bar::after { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--muted); }
+  .note { color: var(--muted); font-size: 13px; margin-top: 12px; }
+  #log { font: 12px ui-monospace, monospace; color: var(--muted); white-space: pre-wrap; max-height: 90px; overflow: auto; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Hoverwheel FFB</h1>
+  <span id="link" class="pill bad">not connected</span>
+  <span class="spacer"></span>
+  <button id="connect" class="primary">Connect wheel</button>
+  <button id="stop" class="stop" title="Space">STOP</button>
+</header>
+
+<main>
+  <section class="card">
+    <h2>Effect</h2>
+    <div class="modes" id="modes"></div>
+    <label for="gain">Strength <span id="gainv">1.5×</span></label>
+    <input id="gain" type="range" min="0.1" max="3" step="0.1" value="1.5">
+    <label for="cap">Torque cap <span id="capv">200</span> (100 ≈ 0.5 A)</label>
+    <input id="cap" type="range" min="50" max="300" step="10" value="200">
+    <div class="row">
+      <button id="center" title="C">Set centre here</button>
+    </div>
+    <p class="note">Keys: 0–5 effects · C centre · Space stop. Effects switch off if this tab is hidden.
+      No encoder yet: angle is estimated from hall speed, so it drifts; re-centre often.</p>
+  </section>
+
+  <section class="card">
+    <h2>Live</h2>
+    <canvas id="wheel" width="720" height="720"></canvas>
+    <div class="bar"><i id="tqbar"></i></div>
+    <div class="stats" style="margin-top:12px">
+      <div class="stat"><b id="sTq">0</b><span>torque cmd</span></div>
+      <div class="stat"><b id="sRpm">0</b><span>wheel rpm</span></div>
+      <div class="stat"><b id="sAng">0°</b><span>angle (est.)</span></div>
+      <div class="stat"><b id="sBat">--</b><span>battery</span></div>
+      <div class="stat"><b id="sTmp">--</b><span>board temp</span></div>
+      <div class="stat"><b id="sFb">0</b><span>feedback frames</span></div>
+    </div>
+    <div id="log" style="margin-top:10px"></div>
+  </section>
+</main>
+
+<script>
+const START = 0xABCD, FB_LEN = 18;
+const MODES = [
+  ["off", "Off", "no force"],
+  ["damper", "Damper", "resists speed"],
+  ["spring", "Spring", "pulls to centre"],
+  ["friction", "Friction", "constant drag"],
+  ["rumble", "Rumble", "rough road buzz"],
+  ["kerb", "Kerb", "rumble-strip bumps"],
+];
+let port = null, writer = null, reader = null;
+let mode = "off", gain = 1.5, cap = 200;
+let fb = null, frames = 0, angle = 0, lastT = performance.now(), tqNow = 0, tqPrev = 0, rpmF = 0, springLP = 0;
+
+const $ = id => document.getElementById(id);
+const log = m => { const l = $("log"); l.textContent = (new Date().toLocaleTimeString() + "  " + m + "\n" + l.textContent).slice(0, 2000); };
+
+// mode buttons
+MODES.forEach(([key, name, desc], i) => {
+  const b = document.createElement("button");
+  b.dataset.mode = key;
+  b.innerHTML = `${name}<kbd>${i}</kbd><small>${desc}</small>`;
+  b.onclick = () => setMode(key);
+  $("modes").appendChild(b);
+});
+function setMode(m) {
+  mode = m;
+  document.querySelectorAll(".modes button").forEach(b => b.classList.toggle("active", b.dataset.mode === m));
+}
+setMode("off");
+
+$("gain").oninput = e => { gain = +e.target.value; $("gainv").textContent = gain.toFixed(1) + "×"; };
+$("cap").oninput = e => { cap = +e.target.value; $("capv").textContent = cap; };
+$("center").onclick = () => { angle = 0; };
+$("stop").onclick = () => setMode("off");
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "INPUT") return;
+  if (e.key >= "0" && e.key <= "5") setMode(MODES[+e.key][0]);
+  else if (e.key === "c" || e.key === "C") angle = 0;
+  else if (e.key === " ") { e.preventDefault(); setMode("off"); }
+});
+document.addEventListener("visibilitychange", () => { if (document.hidden) setMode("off"); });
+
+function frame(speed) {
+  const b = new ArrayBuffer(8), v = new DataView(b);
+  v.setUint16(0, START, true); v.setInt16(2, 0, true); v.setInt16(4, speed, true);
+  v.setUint16(6, (START ^ (speed & 0xFFFF)) & 0xFFFF, true);
+  return new Uint8Array(b);
+}
+
+let rx = new Uint8Array(0);
+function parse(chunk) {
+  const n = new Uint8Array(rx.length + chunk.length); n.set(rx); n.set(chunk, rx.length); rx = n;
+  for (;;) {
+    let i = -1;
+    for (let k = 0; k + 1 < rx.length; k++) if (rx[k] === 0xCD && rx[k + 1] === 0xAB) { i = k; break; }
+    if (i < 0) { rx = rx.slice(Math.max(0, rx.length - 1)); return; }
+    if (rx.length - i < FB_LEN) { rx = rx.slice(i); return; }
+    const v = new DataView(rx.buffer, rx.byteOffset + i, FB_LEN);
+    const f = []; for (let k = 0; k < 9; k++) f.push(k === 0 || k >= 7 ? v.getUint16(k * 2, true) : v.getInt16(k * 2, true));
+    let x = 0; for (let k = 0; k < 8; k++) x ^= f[k] & 0xFFFF;
+    if (x === f[8]) { fb = { rpmR: f[3], rpmL: f[4], bat: f[5] / 100, temp: f[6] / 10 }; frames++; rx = rx.slice(i + FB_LEN); }
+    else rx = rx.slice(i + 2);
+  }
+}
+
+async function readLoop() {
+  try {
+    while (port && reader) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      if (value) parse(value);
+    }
+  } catch (e) { log("read stopped: " + e.message); }
+}
+
+function effect(now) {
+  const rpm = fb ? fb.rpmL : 0;
+  let tq = 0;
+  switch (mode) {
+    case "damper":   tq = -0.6 * rpm; break;
+    case "spring": {
+      // softer spring + heavier damping on filtered speed; deadband at centre
+      const a = Math.abs(angle) < 4 ? 0 : angle - Math.sign(angle) * 4;
+      tq = Math.max(-cap, Math.min(cap, -0.45 * a - 0.45 * rpmF));
+      springLP += 0.85 * (tq - springLP);   // ~15 Hz first-order low-pass at 50 Hz
+      tq = springLP;
+      break;
+    }
+    case "friction": tq = -60 * Math.tanh(rpm / 15); break;
+    case "rumble":   tq = (Math.floor(now / 1000 * 24) % 2) ? 70 : -70; break;
+    case "kerb":     tq = ((now / 1000) % 1.2 < 0.35) ? ((Math.floor(now / 1000 * 16) % 2) ? 90 : -90) : 0; break;
+  }
+  tq = Math.max(-cap, Math.min(cap, tq * gain));
+  // slew limit (max 8 torque units per 20 ms tick) to stop the loop ringing
+  if (mode !== "rumble" && mode !== "kerb") tq = Math.max(tqPrev - 8, Math.min(tqPrev + 8, tq));
+  tqPrev = tq;
+  return Math.round(tq);
+}
+
+async function tick() {
+  const now = performance.now(), dt = (now - lastT) / 1000; lastT = now;
+  if (fb) { angle += fb.rpmL * 6 * Math.min(dt, 0.1); rpmF += 0.3 * (fb.rpmL - rpmF); }
+  tqNow = port ? effect(now) : 0;
+  if (writer) { try { await writer.write(frame(tqNow)); } catch (e) { log("write failed: " + e.message); disconnect(); } }
+}
+setInterval(tick, 20);
+
+async function connect() {
+  if (!("serial" in navigator)) { log("This browser has no Web Serial. Use Chrome or Edge."); return; }
+  try {
+    port = await navigator.serial.requestPort();
+    await port.open({ baudRate: 115200 });
+    writer = port.writable.getWriter(); reader = port.readable.getReader();
+    frames = 0; fb = null; setMode("off");
+    $("connect").textContent = "Disconnect";
+    log("port opened");
+    readLoop();
+  } catch (e) { log("connect failed: " + e.message); port = null; }
+}
+async function disconnect() {
+  setMode("off");
+  try { if (writer) { for (let i = 0; i < 10; i++) await writer.write(frame(0)); writer.releaseLock(); } } catch {}
+  try { if (reader) { await reader.cancel(); reader.releaseLock(); } } catch {}
+  try { if (port) await port.close(); } catch {}
+  writer = reader = port = null; fb = null;
+  $("connect").textContent = "Connect wheel"; log("disconnected");
+}
+$("connect").onclick = () => port ? disconnect() : connect();
+window.addEventListener("beforeunload", () => { if (writer) writer.write(frame(0)); });
+
+// UI refresh + wheel drawing
+const cv = $("wheel"), g = cv.getContext("2d");
+function draw() {
+  const W = cv.width, c = W / 2, r = W * 0.42;
+  g.clearRect(0, 0, W, W);
+  g.save(); g.translate(c, c); g.rotate(angle * Math.PI / 180);
+  g.lineWidth = W * 0.06; g.strokeStyle = "#2f3741"; g.beginPath(); g.arc(0, 0, r, 0, Math.PI * 2); g.stroke();
+  g.strokeStyle = "#ff7a1a"; g.beginPath(); g.arc(0, 0, r, -Math.PI / 2 - 0.12, -Math.PI / 2 + 0.12); g.stroke();
+  g.lineWidth = W * 0.035; g.strokeStyle = "#2f3741";
+  for (const a of [Math.PI / 2, Math.PI * 0.15, Math.PI * 0.85]) { g.beginPath(); g.moveTo(0, 0); g.lineTo(Math.cos(a) * r, Math.sin(a) * r); g.stroke(); }
+  g.fillStyle = "#181d23"; g.strokeStyle = "#3a4450"; g.lineWidth = 6;
+  g.beginPath(); g.arc(0, 0, W * 0.09, 0, Math.PI * 2); g.fill(); g.stroke();
+  g.restore();
+  const linked = port && fb;
+  const lk = $("link"); lk.textContent = !port ? "not connected" : (fb ? "linked" : "no feedback"); lk.className = "pill " + (linked ? "ok" : "bad");
+  $("sTq").textContent = (tqNow > 0 ? "+" : "") + tqNow;
+  $("sRpm").textContent = fb ? fb.rpmL : 0;
+  $("sAng").textContent = Math.round(angle) + "°";
+  $("sBat").textContent = fb ? fb.bat.toFixed(1) + " V" : "--";
+  $("sTmp").textContent = fb ? fb.temp.toFixed(0) + " °C" : "--";
+  $("sFb").textContent = frames;
+  const p = Math.abs(tqNow) / 300 * 50, bar = $("tqbar");
+  bar.style.left = (tqNow >= 0 ? 50 : 50 - p) + "%"; bar.style.width = p + "%";
+  requestAnimationFrame(draw);
+}
+draw();
+</script>
+</body>
+</html>
